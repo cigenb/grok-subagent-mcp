@@ -56,6 +56,11 @@ def handle(m):
             os._exit(2)
         if "slow-task" in text:
             sessions[sid].wait(1.0)
+        if "artifact-task" in text:
+            cwd = text.split("Working directory: ", 1)[1].splitlines()[0]
+            lines = f"\nGROK_MCP_ARTIFACT: {cwd}\\煤炭\\结果.json\n`GROK_MCP_ARTIFACT: relative\\out.txt`\n"
+            send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid,
+                  "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": lines}}}})
         if "child-task" in text:
             child_id = str(uuid.uuid4())
             for kind, status in (("subagent_spawned", "running"), ("subagent_finished", "completed")):

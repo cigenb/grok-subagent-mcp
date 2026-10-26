@@ -150,5 +150,7 @@ class Store:
                 f"cwd: {task['cwd']}\nactivity: {task['activity']}\n")
         if task["error"]:
             text += f"error: {task['error']}\n"
+        if task.get("warning"):
+            text += f"warning: {task['warning']}\n"
         text += self.output(task, full)
         return text

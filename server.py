@@ -9,7 +9,7 @@ from pathlib import Path
 from grok import Grok
 from storage import ACTIVE, TERMINAL, Store
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 INSTRUCTIONS = """将独立任务交给本机 Grok。默认 Grok 4.7 / high、完全访问权限，允许它使用子代理。
 每次派发必须在 scope 说明可读/可改范围、禁止动作、验收要求；子代理继承相同边界。
 短任务用 wait_s，长任务派出后继续其他工作，再用 grok_wait 收齐结果。
@@ -135,20 +135,25 @@ class Service:
                       "Keep temporary files in the task scratch directory. Put final deliverables in the requested location. "
                       "Before replying, collect your subagents and finite background jobs. "
                       "Report changes, verification results and artifact paths. Do not leave background services running. "
-                      'End with a line GROK_MCP_ARTIFACTS: ["absolute paths of final deliverables"], using an empty JSON array if none. '
+                      "End with one line GROK_MCP_ARTIFACT: <absolute path> per final deliverable, written as a plain path "
+                      "without quotes, brackets or escaping; omit these lines if there are none. "
                       "Do not commit, push, delete unrelated files, change global settings, or send external messages "
                       "unless the task explicitly authorizes it. If blocked, report the blocker instead of waiting for human input.")
             result = self.grok.request("session/prompt", {"sessionId": sid,
                                        "prompt": [{"type": "text", "text": prompt}]}, timeout=None, sent=self.prompt_sent[task["id"]])
             self.collect_children(task)
             self.collect_background(task)
+            # Plain lines, not JSON: models hand-writing JSON mix \uXXXX escapes with unescaped Windows separators.
+            paths, invalid = [], []
             for line in self.store.output(task, full=True).splitlines():
-                if line.startswith("GROK_MCP_ARTIFACTS:"):
-                    paths = json.loads(line.split(":", 1)[1])
-                    if not isinstance(paths, list) or any(not isinstance(p, str) or not Path(p).is_absolute() for p in paths):
-                        raise ValueError("Grok returned an invalid artifact list")
-                    task["deliverables"] = paths
-                    task["artifacts"] = list(dict.fromkeys(task["artifacts"] + paths))
+                line = line.strip().strip("`")
+                if line.startswith("GROK_MCP_ARTIFACT:"):
+                    path = line.split(":", 1)[1].strip().strip("\"'")
+                    (paths if Path(path).is_absolute() else invalid).append(path)
+            task["deliverables"] = paths
+            task["artifacts"] = list(dict.fromkeys(task["artifacts"] + paths))
+            if invalid:
+                task["warning"] = "Ignored non-absolute artifact paths: " + ", ".join(invalid)
             reason = result.get("stopReason")
             task["stop_reason"] = reason
             outcome = "interrupted" if reason == "cancelled" else "completed" if reason == "end_turn" else "failed"

@@ -131,6 +131,12 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(sum(tid in r["content"][0]["text"] for r in results), 1)
         self.assertIn("中文结果", self.call("grok_status", {"ids": [tid], "full": True})["content"][0]["text"])
 
+    def test_artifact_lines_keep_unicode_paths_and_skip_invalid(self):
+        task = self.finish(self.spawn("artifact-task"))
+        self.assertEqual(task["status"], "completed", task)
+        self.assertEqual(task["deliverables"], [str(self.root / "煤炭" / "结果.json")])
+        self.assertIn("relative", task["warning"])
+
     def test_interrupt_stops_task(self):
         tid = self.spawn("slow-task")
         deadline = time.monotonic() + 3
