@@ -93,7 +93,7 @@ uv run python manage.py --client codex keep <task-id>
 uv run python manage.py --client codex cleanup-plan --days 7 --out cleanup-plan.json
 ```
 
-Default candidates are finished tasks whose results have been collected and whose conversation has not been used for seven days. Use `--ids` to select tasks explicitly.
+Default candidates are finished tasks whose results have been collected and whose conversation has not been used for seven days. Use `--ids` to select tasks explicitly, or `--sessions` to select every task of the given native Grok sessions.
 Tasks sharing a native conversation are checked together. Active, unread, and retained tasks cannot be deleted.
 The cleanup plan lists exact files, hashes, and artifacts to preserve. Review the list and obtain deletion confirmation before applying it:
 

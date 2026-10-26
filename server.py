@@ -9,7 +9,7 @@ from pathlib import Path
 from grok import Grok
 from storage import ACTIVE, TERMINAL, Store
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 INSTRUCTIONS = """将独立任务交给本机 Grok。默认 Grok 4.7 / high、完全访问权限，允许它使用子代理。
 每次派发必须在 scope 说明可读/可改范围、禁止动作、验收要求；子代理继承相同边界。
 短任务用 wait_s，长任务派出后继续其他工作，再用 grok_wait 收齐结果。

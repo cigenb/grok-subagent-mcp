@@ -190,6 +190,7 @@ def main():
     keep.add_argument("--off", action="store_true")
     preview = subs.add_parser("cleanup-plan")
     preview.add_argument("--ids", nargs="+")
+    preview.add_argument("--sessions", nargs="+", help="Select every task of these native Grok sessions")
     preview.add_argument("--days", type=int, default=7)
     preview.add_argument("--out", type=Path, required=True)
     clean = subs.add_parser("cleanup")
@@ -207,7 +208,14 @@ def main():
         elif args.command == "keep":
             store.keep(args.id, not args.off)
         elif args.command == "cleanup-plan":
-            result = plan(store, args.ids, args.days)
+            ids = args.ids
+            if args.sessions:
+                known = {t["session_id"] for t in store.list()}
+                missing = [sid for sid in args.sessions if sid not in known]
+                if missing:
+                    raise ValueError("No registered task uses these sessions: " + ", ".join(missing))
+                ids = (ids or []) + [t["id"] for t in store.list() if t["session_id"] in args.sessions]
+            result = plan(store, ids, args.days)
             args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

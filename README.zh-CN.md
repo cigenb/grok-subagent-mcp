@@ -92,7 +92,7 @@ uv run python manage.py --client codex keep <任务ID>
 uv run python manage.py --client codex cleanup-plan --days 7 --out cleanup-plan.json
 ```
 
-默认候选为已结束、结果已领取、七天未续问的任务；也可通过 `--ids` 指定任务。
+默认候选为已结束、结果已领取、七天未续问的任务；也可通过 `--ids` 指定任务，或用 `--sessions` 选中指定原生会话的全部任务。
 同一原生会话的多个任务一起检查。运行中、未领取和保留中的任务不可删除。
 清理计划列出具体文件、摘要及保留的产物。检查清单并取得删除确认后执行：
 

@@ -236,6 +236,22 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(other.list(), [])
         other.close()
 
+    def test_cleanup_plan_selects_tasks_by_session(self):
+        import subprocess
+        tid = self.spawn(wait_s=5)
+        sid = self.store.get(tid)["session_id"]
+        second = self.spawn(session_id=sid, wait_s=5)
+        out = self.root / "plan.json"
+        env = dict(os.environ, GROK_MCP_DATA_DIR=str(self.root / "state"))
+        manage = str(Path(__file__).resolve().parents[1] / "manage.py")
+        result = subprocess.run([sys.executable, manage, "--client", "codex", "cleanup-plan", "--sessions", sid, "--out", str(out)],
+                                env=env, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set(json.loads(out.read_text(encoding="utf-8"))["task_ids"]), {tid, second})
+        result = subprocess.run([sys.executable, manage, "--client", "codex", "cleanup-plan", "--sessions", "unknown", "--out", str(out)],
+                                env=env, capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(result.returncode, 0)
+
     def test_cleanup_locks_all_turns_against_keep(self):
         tid = self.spawn(wait_s=5)
         sid = self.store.get(tid)["session_id"]
