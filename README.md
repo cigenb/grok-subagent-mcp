@@ -1,10 +1,10 @@
-# grok-subagent-for-codex
+# grok-subagent-mcp
 
 English | [简体中文](README.zh-CN.md)
 
 Use the local Grok CLI as a subagent through a standard stdio MCP server. Dispatch tasks, resume conversations, inspect progress, send follow-up instructions, and interrupt work.
 
-The server supports Codex and Claude. This repository includes Codex integration; Claude hook integration is configured by the caller.
+The server supports Codex and Claude Code. `install.py` registers the server and result hooks for either client at user level.
 
 ## Requirements
 
@@ -12,19 +12,34 @@ The server supports Codex and Claude. This repository includes Codex integration
 - No third-party Python dependencies. `uv run` creates the project environment.
 - Grok must support ACP session configuration and closing, and the `x.ai/task` and `x.ai/subagent` extensions.
 
-## Install for Codex
+## Install
 
 ```powershell
-git clone https://github.com/cigenb/grok-subagent-for-codex.git
-cd grok-subagent-for-codex
-uv run python install_codex.py
+git clone https://github.com/cigenb/grok-subagent-mcp.git
+cd grok-subagent-mcp
+uv run python install.py codex    # Codex
+uv run python install.py claude   # Claude Code
 ```
+
+Both clients use the MCP server name `grok` and three `mcp_tool` hooks that call `grok_collect`:
+`PostToolUse` and `UserPromptSubmit` collect results; `Stop` returns unread results or asks the model to wait for unfinished tasks.
+Hooks do not wake an idle chat after its turn has ended. Uncollected results remain in the task database and can be retrieved when the conversation continues.
+
+### Codex
 
 The installer backs up existing configuration, registers the `grok` MCP server in the user-level `config.toml`, and merges three MCP tool hooks into `hooks.json`.
 Review and trust these definitions through `/hooks` in the Codex CLI, then start a new chat to load the server.
+Codex uses the `threadId` supplied in call metadata as the source conversation.
 
-`PostToolUse` and `UserPromptSubmit` collect results; `Stop` checks for unfinished tasks.
-Hooks do not wake an idle chat after its turn has ended. Uncollected results remain in the task database and can be retrieved when the conversation continues.
+### Claude Code
+
+The installer backs up `~/.claude/settings.json`, registers the user-scope `grok` server through `claude mcp add-json`, and merges three hooks into `settings.json`. New sessions load both.
+Tools appear as `mcp__grok__grok_*`; add `mcp__grok` to `permissions.allow` to skip per-call confirmation.
+
+Claude Code does not send a conversation ID with tool calls. The server uses the session ID from the `CLAUDE_CODE_SESSION_ID` environment variable that Claude Code sets when it starts the server; this variable is not part of the documented Claude Code interface.
+Resuming the same Claude session after a restart keeps access to its Grok sessions. Tasks follow the server process: if the conversation changes (for example through `/clear`) while the server keeps running, its earlier tasks stay with the new conversation.
+
+### Other MCP clients
 
 Other MCP clients can use the same server with this stdio command:
 
@@ -33,7 +48,7 @@ uv run --directory "<install-dir>" python server.py --client claude
 ```
 
 Other clients can supply `--owner <source-conversation-id>` or the `source_id` tool argument to preserve ownership across server restarts.
-Without either, tasks are isolated to that MCP connection. Codex uses the `threadId` supplied in call metadata.
+Without either, tasks are isolated to that MCP connection.
 
 ## Tools
 
@@ -64,10 +79,12 @@ Runtime data lives under `~/.grok/cigenb-grok-mcp/codex/` or `claude/`:
 - `tasks/<task-id>/output.txt`: assistant output, excluding thinking text.
 - `tasks/<task-id>/scratch/`: task temporary files.
 - `logs/`: per-process Grok diagnostics; several tasks may reference the same log.
-- `backups/`: Codex configuration backups made before installation.
+- `backups/`: client configuration backups made before installation.
 
 Grok's native history remains in `~/.grok/sessions/`, associated by session ID.
 Shared caches, global logs, project deliverables, and worktrees are not removed with task history.
+
+Use `--client codex` or `--client claude` to select the data partition:
 
 ```powershell
 uv run python manage.py --client codex list
@@ -100,9 +117,12 @@ uv run python tests/smoke.py
 
 The second command calls Grok for real, creates files in a system temporary directory, and produces native test sessions.
 
-## Uninstall Codex integration
+## Uninstall
 
-Run `codex mcp remove grok`, then remove the three handlers whose `server` is `grok` and `tool` is `grok_collect` from `~/.codex/hooks.json`. Task data and native Grok history are retained separately.
+- Codex: run `codex mcp remove grok`, then remove the three handlers whose `server` is `grok` and `tool` is `grok_collect` from `~/.codex/hooks.json`.
+- Claude Code: run `claude mcp remove grok -s user`, then remove the same three handlers from `~/.claude/settings.json`.
+
+Task data and native Grok history are retained separately.
 
 ## License
 

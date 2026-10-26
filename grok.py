@@ -54,7 +54,7 @@ class Grok:
                 self.reader.start()
                 threading.Thread(target=self._watch, args=(self.proc,), daemon=True).start()
                 init = self.request("initialize", {"protocolVersion": 1, "clientCapabilities": {},
-                                                   "clientInfo": {"name": "grok-mcp", "version": "0.1.0"}})
+                                                   "clientInfo": {"name": "grok-mcp", "version": "0.2.0"}})
                 methods = [m["id"] for m in init.get("authMethods", [])]
                 method = "cached_token" if "cached_token" in methods else "xai.api_key"
                 if method not in methods:

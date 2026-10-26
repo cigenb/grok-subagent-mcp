@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from install_codex import hook_config, install
+from install import install_claude, install_codex
 from manage import apply_plan, plan
 from server import MCP, Service
 from storage import Store
@@ -320,11 +320,59 @@ class CoreTests(unittest.TestCase):
         original_hook = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "existing-command"}]}]}}
         (home / "hooks.json").write_text(json.dumps(original_hook), encoding="utf-8")
         with patch.dict(os.environ, {"GROK_MCP_DATA_DIR": str(self.root / "state")}):
-            backup = install(home)
+            backup = install_codex(home)
         self.assertEqual((backup / "config.toml").read_text(), 'model = "existing"\n')
         hooks = json.loads((home / "hooks.json").read_text())
         self.assertEqual(hooks["hooks"]["Stop"][0], original_hook["hooks"]["Stop"][0])
         self.assertEqual(len(hooks["hooks"]["Stop"]), 2)
+
+    def test_claude_installer_registers_through_cli_and_merges_hooks(self):
+        home = self.root / "claude"
+        home.mkdir()
+        original = {"env": {"KEEP": "1"}, "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "existing"}]}]}}
+        (home / "settings.json").write_text(json.dumps(original), encoding="utf-8")
+        state = self.root / "claude.json"
+        state.write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+        with patch.dict(os.environ, {"GROK_MCP_DATA_DIR": str(self.root / "state")}),                 patch("install.subprocess.run") as run:
+            backup = install_claude(home, state, claude="claude")
+            self.assertEqual(json.loads((backup / "settings.json").read_text()), original)
+            command = run.call_args.args[0]
+            self.assertEqual(command[:6], ["claude", "mcp", "add-json", "--scope", "user", "grok"])
+            self.assertEqual(json.loads(command[6])["args"][1:], ["--client", "claude"])
+            settings = json.loads((home / "settings.json").read_text())
+            self.assertEqual(settings["env"], {"KEEP": "1"})
+            self.assertEqual(settings["hooks"]["Stop"][0], original["hooks"]["Stop"][0])
+            handler = settings["hooks"]["Stop"][1]["hooks"][0]
+            self.assertEqual(handler["input"], {"event": "Stop"})
+            state.write_text(json.dumps({"mcpServers": {"grok": {"args": json.loads(command[6])["args"]}}}), encoding="utf-8")
+            install_claude(home, state, claude="claude")
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(len(json.loads((home / "settings.json").read_text())["hooks"]["Stop"]), 2)
+            state.write_text(json.dumps({"mcpServers": {"grok": {"args": ["other.py"]}}}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                install_claude(home, state, claude="claude")
+
+    def test_claude_hooks_collect_for_connection_owner(self):
+        store = Store("claude", self.root / "state")
+        service = Service(store, [sys.executable, str(Path(__file__).with_name("fake_grok.py")), str(self.wire)])
+        output = Output()
+        mcp = MCP(service, owner="claude-session", output=output)
+        try:
+            mcp.handle({"id": 1, "method": "tools/call", "params": {"name": "grok_spawn", "arguments": {
+                "prompt": "small-task", "scope": "Only temporary test files", "cwd": str(self.root)}}})
+            self.assertFalse(output.response(1).get("isError"))
+            tid = store.list("claude-session")[0]["id"]
+            until = time.monotonic() + 5
+            while store.get(tid)["status"] != "completed" and time.monotonic() < until:
+                time.sleep(.05)
+            mcp.handle({"id": 2, "method": "tools/call", "params": {"name": "grok_collect", "arguments": {"event": "Stop"}}})
+            payload = json.loads(output.response(2)["content"][0]["text"])
+            self.assertEqual(payload["decision"], "block")
+            self.assertIn(tid, payload["reason"])
+            self.assertTrue(store.get(tid)["delivered"])
+        finally:
+            service.close()
+            store.close()
 
 
 if __name__ == "__main__":
