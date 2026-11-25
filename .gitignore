@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.coverage
+AGENTS.md
+CLAUDE.md
+docs/
+.claude/
+.codex/
+.mcp.json
+.env
+.env.*
+*.log
+*.sqlite3*
+cleanup-plan*.json
